@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0B0B0A">
+<title>Privacy · Poker Nights</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root { color-scheme: dark; --bg: #0B0B0A; --fg: #EAEAE4; --muted: #8E8E86; --line: #2B2B27; --accent: #E61919; }
+  html, body { margin: 0; background: var(--bg); color: var(--fg); }
+  body { font-family: "JetBrains Mono", ui-monospace, Menlo, monospace; font-size: 14px; line-height: 1.6; padding-inline: 16px; padding-block: 32px 64px; }
+  main { max-width: 680px; margin-inline: auto; }
+  h1 { font-family: "Archivo Black", "Arial Black", sans-serif; font-weight: 400; text-transform: uppercase; letter-spacing: -0.04em; font-size: clamp(32px, 8vw, 52px); line-height: .92; margin: 0 0 8px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; margin: 28px 0 8px; }
+  h2::before { content: "/// "; color: var(--accent); }
+  p, li { color: var(--fg); margin: 0 0 10px; }
+  .meta { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .07em; }
+  a { color: var(--fg); }
+  ul { padding-left: 18px; }
+  .back { display: inline-block; margin-top: 28px; border: 1px solid var(--fg); padding: 8px 14px; text-decoration: none; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; font-weight: 700; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy</h1>
+  <p class="meta">Poker Nights. Updated 14 October 2026.</p>
+
+  <p>Poker Nights is a small app for tracking buy-ins and chip counts at a home poker game. It is run by Rajan Rathi for friends.</p>
+
+  <h2>What is stored</h2>
+  <ul>
+    <li>Group names, player names (as typed in), buy-ins, chip counts and the times they were entered.</li>
+    <li>If you sign in with Google: your name, your email address and the list of groups you have opened, so they come back on any phone you sign in on.</li>
+  </ul>
+
+  <h2>What is not stored</h2>
+  <p>No passwords, payment details, contacts or location. Google sign-in only shares your basic profile (name and email) with the app.</p>
+
+  <h2>Where it lives</h2>
+  <p>Data is kept in a Supabase database. The app's pages are served by GitHub Pages. Nothing is sold, shared with advertisers or used for anything other than running the app.</p>
+
+  <h2>Who can see it</h2>
+  <p>A group is visible only to people who have its link. Anyone with a group's edit link can change that group. Your saved list of groups is visible only to you.</p>
+
+  <h2>Deleting your data</h2>
+  <p>Email <a href="mailto:rajanrathi259@gmail.com">rajanrathi259@gmail.com</a> to have your account, or a group, deleted.</p>
+
+  <a class="back" href="./">Back to Poker Nights</a>
+</main>
+</body>
+</html>

@@ -1039,8 +1039,24 @@ function Leaderboard({ groups, allNights }) {
 const SUPABASE_URL = "https://mqsewazkfdizogxkowln.supabase.co";
 const SUPABASE_KEY = "sb_publishable_gmq0_g5Ry3pXERGvLt912w_C3nFiw6Q";
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, flowType: "pkce" },
 });
+const userOf = (session) => {
+  const u = session && session.user;
+  if (!u) return null;
+  const m = u.user_metadata || {};
+  return { id: u.id, email: u.email || "", name: m.full_name || m.name || (u.email || "").split("@")[0] };
+};
+// Merge two group lists, keeping an edit secret whenever either side has one.
+const mergeKnown = (a, b) => {
+  const out = a.map((x) => ({ ...x }));
+  b.forEach((y) => {
+    const i = out.findIndex((x) => x.code === y.code);
+    if (i === -1) out.push({ code: y.code, secret: y.secret || null });
+    else if (!out[i].secret && y.secret) out[i].secret = y.secret;
+  });
+  return out;
+};
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const LINK_RE = /#\/g\/([a-z0-9]{6,40})(?:\/([a-z0-9]{10,80}))?/i;
@@ -1083,8 +1099,36 @@ function ShareLinks({ code, secret, onForget }) {
   </section>`;
 }
 
+function GoogleButton({ onClick, label = "Sign in with Google" }) {
+  return html`<button type="button" class="btn primary" onClick=${onClick}>${label}</button>`;
+}
+
+function AccountBox({ user, onSignIn, onSignOut }) {
+  return html`<section class="share">
+    <p class="section-label">Account</p>
+    ${user
+      ? html`<div class="share-row">
+          <div class="share-text">
+            <strong>${user.name}</strong>
+            <span class="meta">${user.email}. Your groups are saved to this account, so they come back on any phone you sign in on.</span>
+          </div>
+          <button type="button" class="btn ghost" onClick=${onSignOut}>Sign out</button>
+        </div>`
+      : html`<div class="share-row">
+          <div class="share-text">
+            <strong>Not signed in</strong>
+            <span class="meta">Your groups only live on this phone. Sign in to keep them on your Google account and open them anywhere.</span>
+          </div>
+          <${GoogleButton} onClick=${onSignIn} />
+        </div>`}
+  </section>`;
+}
+
 function App() {
   const [known, setKnownState] = useState(readKnown);
+  const [user, setUser] = useState(null);
+  const userRef = useRef(null);
+  userRef.current = user;
   const [active, setActiveState] = useState(() => store.get("pn:active"));
   const [bundles, setBundles] = useState({});
   const [booted, setBooted] = useState(false);
@@ -1134,24 +1178,66 @@ function App() {
     setKnown(list);
     knownRef.current = list;
     setActive(link.code);
+    if (userRef.current) sb.rpc("pn_save_groups", { p_list: [{ code: link.code, secret }] });
     await load(link.code);
     if (link.secret && !secret) toast("That edit link isn't valid any more. You can still watch.");
   }, [load, toast]);
 
+  // Signed in: bring this account's groups onto this phone, and save this phone's groups to the account.
+  const syncAccount = useCallback(async () => {
+    const { data, error } = await sb.rpc("pn_my_groups");
+    if (error || !Array.isArray(data)) return;
+    const local = readKnown();
+    const merged = mergeKnown(local, data);
+    const missingOnServer = merged.filter((k) => {
+      const s = data.find((d) => d.code === k.code);
+      return !s || (k.secret && !s.secret);
+    });
+    if (missingOnServer.length) await sb.rpc("pn_save_groups", { p_list: missingOnServer });
+    setKnown(merged);
+    knownRef.current = merged;
+    await Promise.all(merged.filter((k) => !local.some((l) => l.code === k.code)).map((k) => load(k.code)));
+  }, [load]);
+
+  const signIn = async () => {
+    const { error } = await sb.auth.signInWithOAuth({ provider: "google", options: { redirectTo: baseUrl() } });
+    if (error) toast("Couldn't start Google sign-in. Try again in a moment.");
+  };
+  const signOut = async () => {
+    await sb.auth.signOut();
+    setUser(null);
+    setKnown([]);
+    knownRef.current = [];
+    setActive(null);
+    setBundles({});
+    setRoute({ tab: "table" });
+    toast("Signed out. Your groups stay saved to your Google account.");
+  };
+
   // First load: anything in the address bar, then every group this device knows.
   useEffect(() => {
+    const hideSecret = (link) => { try { history.replaceState(null, "", `${baseUrl()}#/g/${link.code}`); } catch (e) {} };
     (async () => {
+      // Finishes a Google sign-in if we just came back from one.
+      const { data: sess } = await sb.auth.getSession();
+      const u = userOf(sess && sess.session);
+      setUser(u);
+      userRef.current = u;
+      if (/[?&]code=/.test(location.search)) { try { history.replaceState(null, "", baseUrl() + location.hash); } catch (e) {} }
       const link = parseLink(location.hash);
-      if (link) {
-        await addFromLink(link);
-        try { history.replaceState(null, "", `${baseUrl()}#/g/${link.code}`); } catch (e) {}
-      }
+      if (link) { await addFromLink(link); hideSecret(link); }
+      if (u) await syncAccount();
       await Promise.all(readKnown().map((k) => load(k.code)));
       setBooted(true);
     })();
-    const onHash = () => { const l = parseLink(location.hash); if (l) addFromLink(l); };
+    const { data: sub } = sb.auth.onAuthStateChange((event, session) => {
+      const u = userOf(session);
+      setUser(u);
+      userRef.current = u;
+    });
+    const onHash = () => { const l = parseLink(location.hash); if (l) { addFromLink(l); hideSecret(l); } };
     window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
+    return () => { window.removeEventListener("hashchange", onHash); sub && sub.subscription && sub.subscription.unsubscribe(); };
   }, []);
 
   const groups = known.map((k) => (bundles[k.code] ? { id: k.code, ...bundles[k.code].group } : null)).filter(Boolean);
@@ -1311,6 +1397,7 @@ function App() {
     setKnown(list);
     knownRef.current = list;
     setActive(data.code);
+    if (userRef.current) sb.rpc("pn_save_groups", { p_list: [{ code: data.code, secret: data.secret }] });
     await load(data.code);
     setNewGroup(""); setCreatingGroup(false);
     setRoute({ tab: "players" });
@@ -1328,6 +1415,7 @@ function App() {
   };
 
   const forget = () => {
+    if (userRef.current) sb.rpc("pn_forget_group", { p_code: activeCode });
     const list = known.filter((k) => k.code !== activeCode);
     setKnown(list);
     knownRef.current = list;
@@ -1342,6 +1430,7 @@ function App() {
       <div class="brand"><${Chip} color="red" size=${22} /> Poker Nights</div>
       <div class="top-right">
         ${group && !canWrite && html`<span class="pill"><span class="live-dot"></span>Watching live</span>`}
+        ${booted && !user && html`<button type="button" class="btn ghost" onClick=${signIn}>Sign in</button>`}
         ${offline && html`<span class="pill" style="color:var(--warn-fg)">Offline, retrying</span>`}
         ${groups.length > 0 && html`<select class="select" id="group-select" aria-label="Group"
           onChange=${(e) => {
@@ -1376,6 +1465,8 @@ function App() {
           onInput=${(e) => setNewGroup(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && createGroup()} />
         <button type="button" class="btn primary" disabled=${!newGroup.trim() || busy} onClick=${createGroup}>Create group</button>
       </div>
+      ${!user && !groups.length && html`<p>Already made groups on another phone? Sign in with the same Google account and they come back here.</p>
+        <${GoogleButton} onClick=${signIn} />`}
       <p>Got a link from a friend? Paste it here, or just open it.</p>
       <div class="empty-row">
         <input id="paste-link" class="field" placeholder="Paste a group link" aria-label="Group link" value=${pasted}
@@ -1423,6 +1514,7 @@ function App() {
   }
 
   return shell(html`
+    ${!route.playerId && html`<${AccountBox} user=${user} onSignIn=${signIn} onSignOut=${signOut} />`}
     ${!route.playerId && html`<${ShareLinks} code=${activeCode} secret=${secretOf(activeCode)} onForget=${forget} />`}
     <${PlayersTab} group=${group} nights=${nights} canWrite=${canWrite} actions=${actions} route=${route} setRoute=${setRoute}
       openNight=${(id) => setRoute({ tab: "history", nightId: id })} />`);
