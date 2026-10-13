@@ -1,0 +1,1434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0A">
+<meta name="description" content="Track buy-ins, chip counts and who pays whom at your home poker game.">
+<title>Poker Nights</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230B0B0A'/%3E%3Crect x='3' y='5' width='3' height='8' fill='%23E61919'/%3E%3Crect x='7' y='3' width='3' height='10' fill='%23EAEAE4'/%3E%3Crect x='11' y='7' width='3' height='6' fill='%232273BF'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* ---- base (normally supplied by the host) ---- */
+html { background: var(--bg); padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+
+/* ---- share links ---- */
+.share { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--line); padding: 14px; background: var(--surface); }
+.share .section-label { margin: 0; }
+.share-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 14px; padding-block: 10px; border-top: 1px solid var(--line); }
+.share-text { display: flex; flex-direction: column; gap: 4px; flex: 1 1 260px; min-width: 0; }
+.share-text strong { text-transform: uppercase; letter-spacing: .06em; font-size: 12px; }
+.share-text code { font-family: var(--mono); font-size: 12px; color: var(--fg); background: var(--bg); border: 1px solid var(--line); padding: 6px 8px; word-break: break-all; }
+
+/* Layout: one rigid column (max 960px) of compartments divided by 1px rules (grid gap over a line-coloured ground).
+   The pot is a barcode of buy-in bars, one bar per buy-in in the buyer's colour; the total sits under it in heavy type.
+   Look: tactical terminal, dark only by choice. Mono for all data and labels, Archivo Black for the few big numbers and titles.
+   One accent: hazard red. Phosphor green is reserved for positive nets only. Every corner is square. */
+:root {
+  --bg: #0B0B0A;
+  --surface: #111110;
+  --raise: #181816;
+  --input: #0B0B0A;
+  --line: #2B2B27;
+  --fg: #EAEAE4;
+  --muted: #8E8E86;
+  --faint: #5A5A54;
+  --accent: #E61919;
+  --accent-ink: #F4F4F0;
+  --up: #4AF626;
+  --down: #FF4A3D;
+  --warn-bg: #1C0E0C;
+  --warn-fg: #FF8A7F;
+  --ok-bg: #0D160B;
+  --shadow: rgb(0 0 0 / .6);
+  --display: "Archivo Black", "Arial Black", "Helvetica Neue", sans-serif;
+  --body: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r-ctl: 0;
+  --r-panel: 0;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; border-radius: 0; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  padding-inline: 16px;
+  padding-block: 18px 72px;
+}
+/* CRT scanlines, fixed and click-through */
+body::after {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 30;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgb(0 0 0 / .22) 2px 3px);
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.wrap { max-width: 960px; margin-inline: auto; display: flex; flex-direction: column; gap: 22px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+
+/* shared micro label voice */
+.meta, .ledger-head, .tile-label, .section-label, .board-meta, .row-meta, .regulars-label, .panel-sub, .log h3, .pill, .tag, .unit, .stack-empty, .stack-more {
+  text-transform: uppercase; letter-spacing: .07em; font-size: 11.5px;
+}
+
+/* ---- top bar ---- */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; justify-content: space-between; padding-bottom: 14px; border-bottom: 2px solid var(--fg); }
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 20px; letter-spacing: -0.03em; text-transform: uppercase; line-height: 1; }
+.brand .chip { --s: 14px !important; }
+.top-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.select {
+  appearance: none; background: var(--bg); border: 1px solid var(--fg);
+  padding: 7px 34px 7px 10px; font-weight: 500; max-width: 240px; text-transform: uppercase; letter-spacing: .06em; font-size: 12px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--fg) 50%), linear-gradient(135deg, var(--fg) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 55%, calc(100% - 12px) 55%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+.pill { display: inline-flex; align-items: center; gap: 8px; color: var(--fg); border: 1px solid var(--line); padding: 5px 10px; }
+.pill .live-dot { width: 7px; height: 7px; background: var(--up); }
+@media (prefers-reduced-motion: no-preference) { .pill .live-dot { animation: blink 1.2s steps(1) infinite; } }
+@keyframes blink { 50% { opacity: 0; } }
+
+.tabs { display: flex; gap: 0; overflow-x: auto; border: 1px solid var(--line); }
+.tab { background: none; border: none; border-right: 1px solid var(--line); padding: 10px 14px; color: var(--muted); font-weight: 500; white-space: nowrap; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; }
+.tab::before { content: "[ "; color: var(--faint); }
+.tab::after { content: " ]"; color: var(--faint); }
+.tab.on { color: var(--accent-ink); background: var(--accent); }
+.tab.on::before, .tab.on::after { color: var(--accent-ink); }
+.tab .count { font-size: 11px; margin-left: 6px; opacity: .75; }
+
+/* ---- buttons ---- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 16px; font-weight: 700; border: 1px solid var(--fg); background: var(--bg); white-space: nowrap; text-transform: uppercase; letter-spacing: .08em; font-size: 12px; transition: background-color .12s steps(2), color .12s steps(2); }
+.btn:hover:not(:disabled) { background: var(--fg); color: var(--bg); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover:not(:disabled) { background: var(--accent-ink); border-color: var(--accent-ink); color: var(--accent); }
+.btn.ghost { border-color: var(--line); color: var(--muted); }
+.btn.danger { border-color: var(--accent); color: var(--down); }
+.btn:disabled { opacity: .35; }
+.back::before { content: "<< "; }
+.linkbtn { background: none; border: none; padding: 0; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; }
+.linkbtn:hover { color: var(--fg); }
+.x { background: none; border: 1px solid transparent; color: var(--faint); font-size: 18px; line-height: 1; padding: 3px 8px; }
+.x:hover { color: var(--accent-ink); background: var(--accent); }
+
+/* ---- night header ---- */
+.night-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 20px; }
+.night-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1 1 260px; }
+.title-input, .title-static {
+  font-family: var(--display); font-weight: 400; font-size: clamp(28px, 6vw, 44px); letter-spacing: -0.04em; text-transform: uppercase;
+  background: none; border: none; padding: 0; width: 100%; min-width: 0; color: var(--fg); line-height: .95;
+}
+.title-input::placeholder { color: var(--faint); }
+.title-input { border-bottom: 1px dashed transparent; }
+.title-input:hover, .title-input:focus { border-bottom-color: var(--accent); outline: none; }
+.meta { color: var(--muted); }
+.unit { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--fg); padding: 7px 10px; color: var(--muted); }
+.unit input { width: 76px; background: none; border: none; text-align: right; font-weight: 700; font-size: 15px; color: var(--fg); letter-spacing: 0; }
+.unit input:focus { outline: none; }
+.unit strong { letter-spacing: 0; font-size: 14px; }
+
+/* ---- the pot: a barcode of buy-ins ---- */
+.pot { display: flex; flex-direction: column; gap: 10px; border: 1px solid var(--line); padding: 16px; background: var(--surface); }
+.stack { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 3px; min-height: 44px; }
+.chip {
+  --s: 12px;
+  width: var(--s); height: var(--s); flex: none; display: inline-block;
+  background: var(--c); box-shadow: inset 0 0 0 1px var(--e);
+}
+.stack .chip { width: 9px; height: 44px; box-shadow: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .stack .chip { transform-origin: bottom; animation: rise .22s steps(4) both; }
+}
+@keyframes rise { from { transform: scaleY(0); } }
+.stack-more { align-self: center; margin-left: 8px; color: var(--muted); }
+.stack-empty { color: var(--faint); align-self: center; }
+.pot-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+.pot-amount { font-family: var(--display); font-weight: 400; font-size: clamp(52px, 13vw, 104px); letter-spacing: -0.05em; line-height: .88; font-variant-numeric: tabular-nums; text-shadow: 0 0 22px rgb(234 234 228 / .12); }
+
+/* ---- ledger (1px rules from the grid gap) ---- */
+.ledger { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.ledger > * { background: var(--bg); }
+.ledger > p.meta { margin: 0; padding: 14px; }
+.ledger-head, .seat {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.3fr) 168px 140px 120px 34px;
+  gap: 12px; align-items: center;
+}
+.ledger-head { padding: 8px 14px; color: var(--muted); background: var(--surface) !important; }
+.seat { padding: 10px 14px; }
+.seat.archive { grid-template-columns: minmax(130px, 1.3fr) 168px 140px 120px 0; }
+.r { text-align: right; justify-self: end; }
+.who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.who-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-transform: uppercase; letter-spacing: .04em; }
+.who-aka { color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; }
+.swatch { background: none; border: none; padding: 0; line-height: 0; flex: none; }
+.swatch .chip { --s: 16px !important; }
+.paid { display: flex; align-items: center; gap: 0; border: 1px solid var(--line); width: max-content; }
+.step { width: 34px; height: 34px; border: none; background: var(--surface); font-size: 17px; line-height: 1; padding: 0; font-weight: 700; }
+.step:hover:not(:disabled) { background: var(--fg); color: var(--bg); }
+.step:active:not(:disabled) { background: var(--accent); color: var(--accent-ink); }
+.step:disabled { opacity: .3; }
+.paid-val { min-width: 92px; text-align: center; font-weight: 700; border-inline: 1px solid var(--line); line-height: 34px; }
+.cash { width: 100%; background: var(--input); border: 1px solid var(--line); padding: 7px 10px; text-align: right; font-weight: 700; }
+.cash:focus { border-color: var(--fg); outline: none; }
+.cash::placeholder { color: var(--faint); font-weight: 400; text-transform: uppercase; letter-spacing: .06em; font-size: 11px; }
+.net { font-weight: 700; }
+.up { color: var(--up); }
+.down { color: var(--down); }
+.even { color: var(--muted); font-weight: 400; font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; }
+.confirm { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding-top: 10px; border-top: 1px dashed var(--accent); font-size: 13px; text-transform: uppercase; letter-spacing: .05em; }
+
+/* ---- add seat ---- */
+.adder { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; }
+.adder-box { position: relative; }
+.adder-input { width: 100%; background: var(--input); border: 1px dashed var(--faint); padding: 11px 12px; }
+.adder-input:focus { border-style: solid; border-color: var(--fg); outline: none; }
+.adder-input::placeholder { color: var(--muted); text-transform: uppercase; letter-spacing: .07em; font-size: 12px; }
+.menu { position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px); background: var(--bg); border: 1px solid var(--fg); padding: 0; box-shadow: 6px 6px 0 var(--accent); display: flex; flex-direction: column; }
+.opt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--line); padding: 10px 12px; }
+.opt:last-child { border-bottom: none; }
+.opt:hover, .opt.hl { background: var(--raise); }
+.opt.hl::before { content: ">"; color: var(--accent); font-weight: 700; }
+.opt .chip { --s: 12px !important; }
+.opt-sub { color: var(--muted); font-size: 11px; margin-left: auto; text-transform: uppercase; letter-spacing: .06em; }
+.opt-note { padding: 10px 12px; color: var(--warn-fg); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--line); }
+.regulars { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.regulars-label { color: var(--muted); margin-right: 4px; }
+.reg { display: inline-flex; align-items: center; gap: 8px; background: var(--bg); border: 1px solid var(--line); padding: 5px 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.reg:hover:not(:disabled) { border-color: var(--fg); }
+.reg .chip { --s: 10px !important; }
+
+/* ---- notices ---- */
+.notice { padding: 12px 14px; font-size: 13px; border: 1px solid currentColor; text-transform: uppercase; letter-spacing: .04em; }
+.notice::before { content: "! "; font-weight: 700; }
+.notice.ok { background: var(--ok-bg); color: var(--up); }
+.notice.ok::before { content: "OK "; }
+.notice.off { background: var(--warn-bg); color: var(--warn-fg); }
+
+/* ---- settlement ---- */
+.panel { background: var(--bg); border: 1px solid var(--fg); padding: 0; display: flex; flex-direction: column; }
+.panel > div:first-child { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.panel h2 { font-family: var(--display); font-weight: 400; font-size: 22px; letter-spacing: -0.03em; text-transform: uppercase; line-height: 1; }
+.panel h2::before { content: "/// "; color: var(--accent); }
+.panel-sub { color: var(--muted); margin: 0; }
+.transfers { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
+.transfer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px; background: var(--bg); }
+.transfer .person { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.transfer .chip { --s: 12px !important; }
+.transfer .pays { color: var(--accent); font-size: 12px; font-weight: 700; }
+.transfer .pays::before { content: ">>> "; }
+.transfer .amt { margin-left: auto; font-family: var(--display); font-size: 24px; letter-spacing: -0.03em; color: var(--fg); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.panel .actions { padding: 12px 16px; }
+.actions .spacer { flex: 1; }
+
+/* ---- activity ---- */
+.log { border: 1px solid var(--line); }
+.log h3 { color: var(--muted); font-weight: 700; padding: 10px 14px; border-bottom: 1px solid var(--line); margin: 0; background: var(--surface); }
+.log h3::before { content: "/// "; color: var(--accent); }
+.log-row { display: flex; align-items: center; gap: 10px; padding: 8px 14px; font-size: 13px; border-bottom: 1px solid var(--line); }
+.log-row:last-of-type { border-bottom: none; }
+.log-row strong { text-transform: uppercase; letter-spacing: .04em; font-weight: 700 !important; }
+.log-row .chip { --s: 8px !important; }
+.log-row .t { color: var(--faint); font-size: 11px; margin-left: auto; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.log-note { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
+.log > .linkbtn { margin: 10px 14px !important; }
+
+/* ---- history / lists ---- */
+.list { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.list:empty { display: none; }
+.row-btn { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; align-items: center; text-align: left; width: 100%; background: var(--bg); border: none; padding: 14px 16px; }
+.row-btn:hover { background: var(--raise); }
+.row-btn:hover .row-title::before { color: var(--accent); }
+.row-title { font-weight: 700; display: flex; align-items: center; gap: 10px; min-width: 0; text-transform: uppercase; letter-spacing: .04em; }
+.row-title::before { content: ">"; color: var(--faint); }
+.row-meta { color: var(--muted); grid-column: 1; }
+.row-side { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 13px; }
+.row-side .who-mini { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); text-transform: uppercase; font-size: 11.5px; letter-spacing: .05em; }
+.row-side .chip { --s: 8px !important; }
+.tag { color: var(--accent-ink); background: var(--accent); padding: 2px 8px; font-weight: 700; }
+.back { align-self: flex-start; }
+
+/* ---- players / leaderboard ---- */
+.group-title { font-family: var(--display); font-weight: 400; font-size: clamp(30px, 7vw, 52px); letter-spacing: -0.045em; line-height: .92; text-transform: uppercase; background: none; border: none; padding: 0; width: 100%; border-bottom: 1px dashed transparent; color: var(--fg); }
+.group-title:hover, .group-title:focus { border-bottom-color: var(--accent); outline: none; }
+.board-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 112px; gap: 6px 16px; align-items: center; width: 100%; text-align: left; background: var(--bg); border: none; padding: 12px 16px; }
+.board-row:hover { background: var(--raise); }
+.board-row .chip { --s: 14px !important; }
+.board-row .net { font-size: 15px; }
+.board-meta { color: var(--muted); }
+.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.tile { background: var(--bg); padding: 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tile-label { color: var(--muted); }
+.tile-val { font-family: var(--display); font-weight: 400; font-size: clamp(22px, 4vw, 30px); letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+.profile-head { display: flex; align-items: center; gap: 14px; }
+.profile-head > .chip { --s: 36px !important; }
+.aliases { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.alias { display: inline-flex; align-items: center; gap: 2px; background: var(--bg); border: 1px solid var(--line); padding: 3px 2px 3px 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+.alias button { background: none; border: none; color: var(--faint); padding: 0 6px; font-size: 15px; line-height: 1; }
+.alias button:hover { color: var(--down); }
+.palette { display: flex; flex-wrap: wrap; gap: 6px; }
+.palette button { background: none; border: 1px solid transparent; padding: 3px; line-height: 0; }
+.palette button.on { border-color: var(--fg); }
+.palette .chip { --s: 24px !important; }
+.section-label { color: var(--muted); font-weight: 700; margin: 0 0 10px; }
+.section-label::before { content: "/// "; color: var(--accent); }
+.filters { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--line); width: max-content; max-width: 100%; }
+.filters .reg { border: none; border-right: 1px solid var(--line); padding: 8px 14px; color: var(--muted); }
+.filters .reg:last-child { border-right: none; }
+.filters .reg[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.rank { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--faint); min-width: 26px; text-align: right; flex: none; font-weight: 700; }
+.list > .board-row:first-child .rank { color: var(--accent); }
+.board-row.static { cursor: default; }
+.board-row.static:hover { background: var(--bg); }
+
+/* ---- empty / loading ---- */
+.empty { padding-block: 24px; display: flex; flex-direction: column; gap: 14px; align-items: flex-start; max-width: 60ch; }
+.empty h2 { font-family: var(--display); font-weight: 400; font-size: clamp(30px, 7vw, 48px); letter-spacing: -0.045em; line-height: .92; text-transform: uppercase; }
+.empty p { margin: 0; color: var(--muted); }
+.empty-row { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
+.empty-row .field { flex: 1 1 200px; padding: 10px 12px; }
+.field { background: var(--input); border: 1px solid var(--line); padding: 7px 10px; min-width: 0; }
+.field:focus { border-color: var(--fg); outline: none; }
+.field::placeholder { color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-size: 12px; }
+.skel { height: 52px; background: var(--surface); border: 1px solid var(--line); }
+@media (prefers-reduced-motion: no-preference) { .skel { animation: blink 1.2s steps(1) infinite; } }
+
+.toast { position: fixed; left: 50%; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 40; background: var(--bg); color: var(--fg); border: 1px solid var(--fg); box-shadow: 5px 5px 0 var(--accent); padding: 10px 16px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; max-width: calc(100% - 32px); text-align: center; }
+
+/* ---- loading screen ---- */
+.splash { position: fixed; inset: 0; z-index: 25; background: var(--bg); display: flex; align-items: center; padding-inline: 24px; padding-block: env(safe-area-inset-top, 0px) env(safe-area-inset-bottom, 0px); transition: opacity .3s steps(3); }
+.splash.leaving { opacity: 0; pointer-events: none; }
+.splash-inner { width: 100%; max-width: 960px; margin-inline: auto; display: flex; flex-direction: column; gap: 22px; }
+.splash-bars { display: flex; align-items: flex-end; gap: 4px; height: 72px; }
+.splash-bars span { width: 12px; height: 100%; background: var(--c); transform-origin: bottom; }
+@media (prefers-reduced-motion: no-preference) {
+  .splash-bars span { animation: stack 1.4s steps(5) infinite; animation-delay: calc(var(--i) * 110ms); }
+}
+@keyframes stack { 0% { transform: scaleY(0); } 45%, 80% { transform: scaleY(1); } 100% { transform: scaleY(0); } }
+.splash-title { font-family: var(--display); font-weight: 400; font-size: clamp(64px, 17vw, 168px); letter-spacing: -0.055em; line-height: .84; text-transform: uppercase; }
+.splash-title em { font-style: normal; color: var(--accent); display: block; }
+.splash-status { margin: 0; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; font-size: 12px; border-top: 1px solid var(--line); padding-top: 12px; display: flex; justify-content: space-between; gap: 12px; }
+.splash-status .cursor { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .splash-status .cursor { animation: blink 1s steps(1) infinite; } }
+
+/* ---- phone ---- */
+@media (max-width: 760px) {
+  .ledger-head { display: none; }
+  .seat, .seat.archive {
+    grid-template-columns: 1fr auto;
+    grid-template-areas: "who x" "paid paid" "cash net";
+    row-gap: 12px; padding: 14px;
+  }
+  .seat > .c-who { grid-area: who; }
+  .seat > .c-x { grid-area: x; }
+  .seat > .c-paid { grid-area: paid; }
+  .seat > .c-cash { grid-area: cash; }
+  .seat > .c-net { grid-area: net; align-self: end; }
+  .seat [data-label]::before { content: attr(data-label); display: block; font-size: 10.5px; color: var(--muted); margin-bottom: 5px; text-align: left; font-weight: 400; text-transform: uppercase; letter-spacing: .08em; }
+  .c-cash { max-width: 180px; }
+  .stack .chip { width: 7px; height: 36px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .board-row { grid-template-columns: minmax(0, 1fr) 100px; }
+  .board-row .board-meta { grid-column: 1 / -1; grid-row: 2; }
+  .actions .btn.primary { flex: 1 1 100%; }
+  .filters { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://unpkg.com/htm@3.1.1/preact/standalone.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script>
+const { html, render, useState, useEffect, useMemo, useRef, useCallback } = htmPreact;
+
+/* ------------------------------------------------------------ */
+/*  Helpers                                                      */
+/* ------------------------------------------------------------ */
+
+const CHIPS = [
+  { id: "red", c: "#C8102E", e: "#7E0A1D" },
+  { id: "blue", c: "#2273BF", e: "#123F6B" },
+  { id: "green", c: "#169B5F", e: "#0B5E39" },
+  { id: "purple", c: "#7B4BC4", e: "#48297A" },
+  { id: "yellow", c: "#E0A82E", e: "#8E6516" },
+  { id: "black", c: "#2C2E33", e: "#0F1012" },
+  { id: "pink", c: "#D9578C", e: "#8C3158" },
+  { id: "teal", c: "#178F8C", e: "#0B5452" },
+  { id: "orange", c: "#E06A24", e: "#8A3E10" },
+  { id: "slate", c: "#5B6B72", e: "#323C41" },
+];
+const chipOf = (id) => CHIPS.find((x) => x.id === id) || CHIPS[0];
+const Chip = ({ color, size }) => {
+  const k = chipOf(color);
+  const style = `--c:${k.c};--e:${k.e};${size ? `--s:${size}px;` : ""}`;
+  return html`<span class="chip" style=${style} aria-hidden="true"></span>`;
+};
+
+const inr = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+const money = (n) => (Math.round(n || 0) < 0 ? "−" : "") + "₹" + inr.format(Math.abs(Math.round(n || 0)));
+const signed = (n) => (Math.round(n) > 0 ? "+" : "") + money(n);
+const tone = (n) => (n > 0 ? "up" : n < 0 ? "down" : "even");
+const dayLabel = (ts) => new Date(ts).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" });
+const fullDate = (ts) => new Date(ts).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+const timeLabel = (ts) => new Date(ts).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+const nightName = (n) => (n && n.name && n.name.trim()) || (n ? dayLabel(n.startedAt) : "");
+function elapsed(from, to) {
+  const mins = Math.max(0, Math.floor(((to || Date.now()) - from) / 60000));
+  if (mins < 1) return "just started";
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+const norm = (s) => (s || "").toLowerCase().normalize("NFKD").replace(/[^a-z0-9]/g, "");
+function lev(a, b) {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+
+/** Per-seat totals for one night. */
+function tally(night, events) {
+  const paid = {};
+  const buyins = {};
+  (night.seats || []).forEach((s) => { paid[s.pid] = 0; buyins[s.pid] = 0; });
+  (events || []).forEach((ev) => {
+    paid[ev.pid] = (paid[ev.pid] || 0) + (ev.amount || 0);
+    if (ev.amount > 0) buyins[ev.pid] = (buyins[ev.pid] || 0) + 1;
+  });
+  const seats = (night.seats || []).map((s) => {
+    const p = paid[s.pid] || 0;
+    const out = s.cashOut === null || s.cashOut === undefined ? null : s.cashOut;
+    return { ...s, paid: p, buyins: buyins[s.pid] || 0, net: out === null ? null : out - p };
+  });
+  const pot = seats.reduce((a, s) => a + s.paid, 0);
+  const counted = seats.reduce((a, s) => a + (s.cashOut || 0), 0);
+  const anyCounted = seats.some((s) => s.cashOut !== null && s.cashOut !== undefined);
+  const allCounted = seats.length > 0 && seats.every((s) => s.cashOut !== null && s.cashOut !== undefined);
+  return { seats, pot, counted, anyCounted, allCounted, buyinCount: (events || []).filter((e) => e.amount > 0).length };
+}
+
+/** Fewest transfers that settle everyone's net. */
+function settleUp(nets) {
+  const owed = nets.filter((p) => p.net > 0).map((p) => ({ ...p })).sort((a, b) => b.net - a.net);
+  const owes = nets.filter((p) => p.net < 0).map((p) => ({ ...p, net: -p.net })).sort((a, b) => b.net - a.net);
+  const out = [];
+  let i = 0, j = 0, guard = 0;
+  while (i < owes.length && j < owed.length && guard++ < 500) {
+    const amount = Math.min(owes[i].net, owed[j].net);
+    if (amount > 0) out.push({ from: owes[i].pid, to: owed[j].pid, amount: Math.round(amount) });
+    owes[i].net -= amount;
+    owed[j].net -= amount;
+    if (owes[i].net <= 0.5) i++;
+    if (owed[j].net <= 0.5) j++;
+  }
+  return out;
+}
+
+function shareText(group, night, t, transfers, nameOf) {
+  const lines = [];
+  lines.push(`${nightName(night)}${group && group.name ? ` (${group.name})` : ""}`);
+  lines.push(`Pot ${money(t.pot)}`);
+  lines.push("");
+  [...t.seats].sort((a, b) => (b.net || 0) - (a.net || 0)).forEach((s) => {
+    lines.push(`${nameOf(s.pid)}: ${s.net === null ? "still playing" : signed(s.net)}`);
+  });
+  if (transfers.length) {
+    lines.push("");
+    lines.push("Who pays whom");
+    transfers.forEach((x) => lines.push(`${nameOf(x.from)} pays ${nameOf(x.to)} ${money(x.amount)}`));
+  }
+  if (t.allCounted && t.counted !== t.pot) {
+    lines.push("");
+    lines.push(`Chip count is off by ${money(Math.abs(t.counted - t.pot))}.`);
+  }
+  return lines.join("\n");
+}
+
+/* ------------------------------------------------------------ */
+/*  Small components                                             */
+/* ------------------------------------------------------------ */
+
+/** Input that keeps its own draft and saves on pause, Enter or blur. */
+function DraftInput({ value, onCommit, numeric, className, placeholder, id, label, disabled }) {
+  const shown = value === null || value === undefined ? "" : String(value);
+  const [v, setV] = useState(shown);
+  const focused = useRef(false);
+  const timer = useRef(null);
+  const last = useRef(shown);
+  useEffect(() => {
+    last.current = shown;
+    if (!focused.current) setV(shown);
+  }, [shown]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const commit = (raw) => {
+    clearTimeout(timer.current);
+    const text = numeric ? raw : raw.trim();
+    if (text === last.current) return;
+    last.current = text;
+    onCommit(numeric ? (text === "" ? null : Number(text)) : text);
+  };
+  return html`<input
+    id=${id}
+    aria-label=${label}
+    class=${className}
+    value=${v}
+    placeholder=${placeholder}
+    inputmode=${numeric ? "numeric" : undefined}
+    autocomplete="off"
+    disabled=${disabled}
+    onFocus=${() => { focused.current = true; }}
+    onBlur=${(e) => { focused.current = false; commit(e.target.value); }}
+    onInput=${(e) => {
+      let t = e.target.value;
+      if (numeric) { t = t.replace(/[^0-9]/g, ""); if (t !== e.target.value) e.target.value = t; }
+      setV(t);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => commit(t), 900);
+    }}
+    onKeyDown=${(e) => { if (e.key === "Enter") e.target.blur(); }}
+  />`;
+}
+
+function PotStack({ seats, unit, colorOf }) {
+  const chips = [];
+  seats.forEach((s) => {
+    const n = unit > 0 ? Math.max(0, Math.round(s.paid / unit)) : 0;
+    for (let i = 0; i < n; i++) chips.push({ key: `${s.pid}-${i}`, color: colorOf(s.pid) });
+  });
+  if (!chips.length) return html`<div class="stack"><span class="stack-empty">No buy-ins yet</span></div>`;
+  const shown = chips.slice(0, 40);
+  return html`<div class="stack" aria-hidden="true">
+    ${shown.map((c) => html`<${Chip} key=${c.key} color=${c.color} />`)}
+    ${chips.length > shown.length && html`<span class="stack-more">+${chips.length - shown.length}</span>`}
+  </div>`;
+}
+
+function AddSeat({ roster, seatedIds, onPick, onCreate }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const seated = new Set(seatedIds);
+  const nq = norm(q);
+  const names = (p) => [p.name, ...(p.aliases || [])];
+  const avail = roster.filter((p) => !seated.has(p.pid));
+  const matches = nq ? avail.filter((p) => names(p).some((n) => norm(n).includes(nq))) : [];
+  const exact = nq ? roster.find((p) => names(p).some((n) => norm(n) === nq)) : null;
+  const tol = nq.length > 5 ? 2 : 1;
+  const fuzzy = nq.length >= 3 ? avail.filter((p) => !matches.includes(p) && names(p).some((n) => lev(norm(n), nq) <= tol)) : [];
+  const alreadySeated = exact && seated.has(exact.pid);
+  const canCreate = nq && !exact;
+
+  const reset = () => { setQ(""); setOpen(false); };
+  const pick = async (pid) => { setBusy(true); await onPick(pid); setBusy(false); reset(); };
+  const create = async () => { setBusy(true); await onCreate(q.trim()); setBusy(false); reset(); };
+
+  const onKey = (e) => {
+    if (e.key === "Escape") { setOpen(false); return; }
+    if (e.key !== "Enter" || busy) return;
+    e.preventDefault();
+    if (matches.length) pick(matches[0].pid);
+    else if (canCreate && !fuzzy.length) create();
+  };
+
+  const akaFor = (p) => {
+    if (!nq || norm(p.name).includes(nq)) return null;
+    const hit = (p.aliases || []).find((a) => norm(a).includes(nq) || lev(norm(a), nq) <= tol);
+    return hit ? `also called ${hit}` : null;
+  };
+
+  return html`<div class="adder">
+    <div class="adder-box">
+      <input
+        id="add-seat"
+        class="adder-input"
+        aria-label="Add a player to the table"
+        placeholder="Add a player by name"
+        autocomplete="off"
+        value=${q}
+        disabled=${busy}
+        onInput=${(e) => { setQ(e.target.value); setOpen(true); }}
+        onFocus=${() => setOpen(true)}
+        onBlur=${() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown=${onKey}
+      />
+      ${open && nq && html`<div class="menu" role="listbox">
+        ${alreadySeated && html`<div class="opt-note">${exact.name} is already at the table.</div>`}
+        ${matches.map((p, i) => html`<button type="button" class=${"opt" + (i === 0 ? " hl" : "")} onMouseDown=${(e) => e.preventDefault()} onClick=${() => pick(p.pid)}>
+          <${Chip} color=${p.color} /> <span>${p.name}</span>${akaFor(p) && html`<span class="opt-sub">${akaFor(p)}</span>`}
+        </button>`)}
+        ${fuzzy.map((p) => html`<button type="button" class="opt" onMouseDown=${(e) => e.preventDefault()} onClick=${() => pick(p.pid)}>
+          <${Chip} color=${p.color} /> <span>Did you mean <strong>${p.name}</strong>?</span>
+        </button>`)}
+        ${canCreate && html`<button type="button" class=${"opt" + (!matches.length && !fuzzy.length ? " hl" : "")} onMouseDown=${(e) => e.preventDefault()} onClick=${create}>
+          <span>Add <strong>${q.trim()}</strong> as a new player</span>
+        </button>`}
+      </div>`}
+    </div>
+    ${avail.length > 0 && !nq && html`<div class="regulars">
+      <span class="regulars-label">Regulars</span>
+      ${avail.slice(0, 12).map((p) => html`<button type="button" class="reg" disabled=${busy} onClick=${() => pick(p.pid)}><${Chip} color=${p.color} />${p.name}</button>`)}
+    </div>`}
+  </div>`;
+}
+
+function CopyButton({ text, label = "Copy summary" }) {
+  const [done, setDone] = useState(false);
+  const ref = useRef(null);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setDone(true);
+      setTimeout(() => setDone(false), 1800);
+    } catch (e) {
+      if (ref.current) { ref.current.hidden = false; ref.current.select(); }
+    }
+  };
+  return html`<button type="button" class="btn" onClick=${copy}>${done ? "Copied" : label}</button>
+    <textarea ref=${ref} hidden readonly class="field" style="width:100%;min-height:140px;font-family:var(--mono);font-size:13px" aria-label="Summary text" value=${text}></textarea>`;
+}
+
+/* ------------------------------------------------------------ */
+/*  Seat row                                                    */
+/* ------------------------------------------------------------ */
+
+function SeatRow({ seat, player, unit, editable, archive, actions }) {
+  const [panel, setPanel] = useState(null); // "remove" confirmation
+
+  const name = player ? player.name : "Unknown player";
+  return html`<div class=${"seat" + (archive ? " archive" : "")}>
+    <div class="who c-who">
+      ${editable
+        ? html`<button type="button" class="swatch" title="Change chip colour" aria-label=${`Change ${name}'s chip colour`} onClick=${() => actions.cycleColor(seat.pid)}><${Chip} color=${player && player.color} /></button>`
+        : html`<span class="swatch"><${Chip} color=${player && player.color} /></span>`}
+      <div style="min-width:0">
+        <div class="who-name">${name}</div>
+        ${seat.buyins > 1 && html`<div class="who-aka">${seat.buyins} buy-ins</div>`}
+      </div>
+    </div>
+
+    <div class="c-paid" data-label="Paid in">
+      ${editable
+        ? html`<div class="paid">
+            <button type="button" class="step" aria-label=${`Negative buy-in for ${name}`} title="Negative buy-in" disabled=${!unit} onClick=${() => actions.addEvent(seat.pid, -unit, "Negative buy-in")}>−</button>
+            <span class="paid-val num">${money(seat.paid)}</span>
+            <button type="button" class="step" aria-label=${`Add a buy-in for ${name}`} title="Add a buy-in" disabled=${!unit} onClick=${() => actions.addEvent(seat.pid, unit, "Buy-in")}>+</button>
+          </div>`
+        : html`<span class="num" style="font-weight:600">${money(seat.paid)}</span>`}
+    </div>
+
+    <div class="c-cash" data-label="Chips at the end">
+      ${editable
+        ? html`<${DraftInput} id=${`cash-${seat.pid}`} label=${`${name}'s chips at the end`} className="cash num" numeric placeholder="Not counted" value=${seat.cashOut} onCommit=${(v) => actions.setCashOut(seat.pid, v)} />`
+        : html`<span class="num">${seat.cashOut === null || seat.cashOut === undefined ? "Not counted" : money(seat.cashOut)}</span>`}
+    </div>
+
+    <div class=${"c-net r num net " + (seat.net === null ? "even" : tone(seat.net))} data-label="Net">
+      ${seat.net === null ? "Playing" : signed(seat.net)}
+    </div>
+
+    <div class="c-x r">
+      ${editable && html`<button type="button" class="x" aria-label=${`Remove ${name} from the table`} onClick=${() => setPanel(panel === "remove" ? null : "remove")}>×</button>`}
+    </div>
+
+    ${editable && panel === "remove" && html`<div class="confirm">
+      <span>Remove ${name} and their ${money(seat.paid)} from tonight?</span>
+      <button type="button" class="btn danger" onClick=${() => actions.removeSeat(seat.pid)}>Remove</button>
+      <button type="button" class="btn ghost" onClick=${() => setPanel(null)}>Keep</button>
+    </div>`}
+  </div>`;
+}
+
+/* ------------------------------------------------------------ */
+/*  Night view (live table and archived nights)                  */
+/* ------------------------------------------------------------ */
+
+function NightView({ night, events, group, roster, canWrite, archive, actions, onBack }) {
+  const playerOf = (pid) => (group && group.players && group.players[pid] ? { pid, ...group.players[pid] } : null);
+  const nameOf = (pid) => (playerOf(pid) ? playerOf(pid).name : "Unknown");
+  const colorOf = (pid) => (playerOf(pid) ? playerOf(pid).color : "slate");
+  const t = useMemo(() => tally(night, events), [night, events]);
+  const transfers = useMemo(() => (t.allCounted ? settleUp(t.seats.map((s) => ({ pid: s.pid, net: s.net }))) : []), [t]);
+  const editable = canWrite && !archive && night.status === "open";
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    if (archive) return;
+    const iv = setInterval(() => tick((n) => n + 1), 60000);
+    return () => clearInterval(iv);
+  }, [archive]);
+
+  // Keep the phone screen awake while the live table is open.
+  useEffect(() => {
+    if (archive || !navigator.wakeLock) return;
+    let lock = null, alive = true;
+    const req = async () => { try { lock = await navigator.wakeLock.request("screen"); } catch (e) {} };
+    const vis = () => { if (alive && document.visibilityState === "visible") req(); };
+    req();
+    document.addEventListener("visibilitychange", vis);
+    return () => { alive = false; document.removeEventListener("visibilitychange", vis); try { lock && lock.release(); } catch (e) {} };
+  }, [archive]);
+
+  const diff = t.counted - t.pot;
+  const pending = t.seats.filter((s) => s.cashOut === null || s.cashOut === undefined);
+  const text = shareText(group, night, t, transfers, nameOf);
+  const log = [...(events || [])].sort((a, b) => b.at - a.at);
+  const shownLog = showAll ? log : log.slice(0, 6);
+
+  return html`<div class="wrap" style="gap:22px">
+    ${onBack && html`<button type="button" class="btn ghost back" onClick=${onBack}>Back to all nights</button>`}
+
+    <section class="night-head">
+      <div class="night-title">
+        ${editable
+          ? html`<${DraftInput} id="night-name" label="Name this night" className="title-input" placeholder=${dayLabel(night.startedAt)} value=${night.name || ""} onCommit=${(v) => actions.renameNight(v)} />`
+          : html`<h1 class="title-static">${nightName(night)}</h1>`}
+        <span class="meta">
+          ${night.name ? `${fullDate(night.startedAt)}, ` : ""}${night.status === "open" ? `started ${timeLabel(night.startedAt)}, ${elapsed(night.startedAt)} in` : `played ${elapsed(night.startedAt, night.settledAt)}`}
+        </span>
+      </div>
+      ${editable
+        ? html`<label class="unit" for="unit-input">Buy-in <${DraftInput} id="unit-input" label="Buy-in amount" className="num" numeric value=${night.unit} onCommit=${(v) => v && actions.setUnit(v)} /></label>`
+        : html`<span class="unit">Buy-in <strong class="num" style="color:var(--fg)">${money(night.unit)}</strong></span>`}
+    </section>
+
+    <section class="pot">
+      <${PotStack} seats=${t.seats} unit=${night.unit} colorOf=${colorOf} />
+      <div class="pot-line">
+        <span class="pot-amount">${money(t.pot)}</span>
+        <span class="meta">in the pot from ${t.buyinCount} buy-in${t.buyinCount === 1 ? "" : "s"}, ${t.seats.length} player${t.seats.length === 1 ? "" : "s"}</span>
+      </div>
+    </section>
+
+    <section class="ledger">
+      ${t.seats.length > 0 && html`<div class="ledger-head" aria-hidden="true">
+        <span>Player</span><span>Paid in</span><span class="r">Chips at the end</span><span class="r">Net</span><span></span>
+      </div>`}
+      ${t.seats.map((s) => html`<${SeatRow} key=${s.pid} seat=${s} player=${playerOf(s.pid)} unit=${night.unit} editable=${editable} archive=${!editable} actions=${actions} />`)}
+      ${!t.seats.length && html`<p class="meta">Nobody is seated yet.${editable ? " Add the first player below." : ""}</p>`}
+      ${editable && html`<${AddSeat} roster=${roster} seatedIds=${t.seats.map((s) => s.pid)} onPick=${actions.seatPlayer} onCreate=${actions.seatNewPlayer} />`}
+    </section>
+
+    ${t.anyCounted && html`<div class=${"notice " + (diff === 0 ? "ok" : "off")}>
+      ${diff === 0
+        ? "Chips counted match the pot exactly."
+        : diff > 0
+          ? html`<strong>${money(diff)} more</strong> counted than went in. A stack was over-counted, or a buy-in is missing above.`
+          : html`<strong>${money(-diff)} unaccounted for.</strong> ${pending.length ? "Some stacks are still uncounted." : "A stack was counted short, or chips are still on the table."}`}
+    </div>`}
+
+    <section class="panel">
+      <div>
+        <h2>Who pays whom</h2>
+        <p class="panel-sub">
+          ${!t.seats.length
+            ? "Seat some players first."
+            : !t.allCounted
+              ? `Waiting on chip counts for ${pending.map((s) => nameOf(s.pid)).join(", ")}.`
+              : transfers.length
+                ? `${transfers.length} transfer${transfers.length > 1 ? "s" : ""} settles the whole night.`
+                : "Everyone broke even. Nothing to move."}
+        </p>
+      </div>
+      ${transfers.length > 0 && html`<ol class="transfers">
+        ${transfers.map((x, i) => html`<li key=${i} class="transfer">
+          <span class="person"><${Chip} color=${colorOf(x.from)} />${nameOf(x.from)}</span>
+          <span class="pays">pays</span>
+          <span class="person"><${Chip} color=${colorOf(x.to)} />${nameOf(x.to)}</span>
+          <span class="amt num">${money(x.amount)}</span>
+        </li>`)}
+      </ol>`}
+      ${t.seats.length > 0 && html`<div class="actions">
+        <${CopyButton} text=${text} />
+        <span class="spacer"></span>
+        ${editable && html`<button type="button" class="btn primary" disabled=${!t.allCounted} onClick=${() => actions.closeNight(t)}>Close the night</button>`}
+        ${canWrite && archive && night.status === "settled" && html`<button type="button" class="btn" onClick=${actions.reopenNight}>Reopen</button>`}
+      </div>`}
+    </section>
+
+    ${log.length > 0 && html`<section class="log">
+      <h3>Activity</h3>
+      ${shownLog.map((ev) => html`<div class="log-row" key=${ev.id}>
+        <${Chip} color=${colorOf(ev.pid)} />
+        <span><strong style="font-weight:500">${nameOf(ev.pid)}</strong> <span class=${"num " + tone(ev.amount)}>${signed(ev.amount)}</span> <span class="log-note">${ev.note}</span></span>
+        <span class="t">${timeLabel(ev.at)}</span>
+        ${editable && html`<button type="button" class="x" aria-label="Undo this entry" title="Undo" onClick=${() => actions.deleteEvent(ev.id)}>×</button>`}
+      </div>`)}
+      ${log.length > 6 && html`<button type="button" class="linkbtn" style="margin-top:8px" onClick=${() => setShowAll(!showAll)}>${showAll ? "Show less" : `Show all ${log.length} entries`}</button>`}
+    </section>`}
+
+    ${canWrite && archive && html`<div class="actions">
+      ${confirmDelete
+        ? html`<span class="meta">Delete ${nightName(night)} for everyone? This cannot be undone.</span>
+            <button type="button" class="btn danger" onClick=${actions.deleteNight}>Delete night</button>
+            <button type="button" class="btn ghost" onClick=${() => setConfirmDelete(false)}>Keep it</button>`
+        : html`<button type="button" class="linkbtn" onClick=${() => setConfirmDelete(true)}>Delete this night</button>`}
+    </div>`}
+  </div>`;
+}
+
+/* ------------------------------------------------------------ */
+/*  Tabs                                                         */
+/* ------------------------------------------------------------ */
+
+function HistoryList({ nights, group, onOpen }) {
+  const sorted = [...nights].sort((a, b) => b.startedAt - a.startedAt);
+  if (!sorted.length) {
+    return html`<div class="empty"><h2>No nights yet</h2><p>Every night you play shows up here once it starts. Tap one to see the full table, the payouts and every buy-in.</p></div>`;
+  }
+  const p = (pid) => (group.players && group.players[pid]) || { name: "Unknown", color: "slate" };
+  return html`<div class="list">
+    ${sorted.map((n) => {
+      let side = null;
+      if (n.status === "settled" && n.summary) {
+        const rows = Object.entries(n.summary).map(([pid, v]) => ({ pid, net: v.out - v.in, in: v.in }));
+        const pot = rows.reduce((a, r) => a + r.in, 0);
+        const top = rows.sort((a, b) => b.net - a.net)[0];
+        side = html`<span class="num" style="font-weight:600">${money(pot)}</span>
+          ${top && top.net > 0 && html`<span class="who-mini"><${Chip} color=${p(top.pid).color} />${p(top.pid).name} <span class="num up">${signed(top.net)}</span></span>`}`;
+      } else {
+        side = html`<span class="tag">Live</span>`;
+      }
+      return html`<button type="button" class="row-btn" key=${n.id} onClick=${() => onOpen(n.id)}>
+        <span class="row-title">${nightName(n)}</span>
+        <span class="row-meta">${fullDate(n.startedAt)}, ${(n.seats || []).length} players, ${money(n.unit)} buy-in</span>
+        <span class="row-side">${side}</span>
+      </button>`;
+    })}
+  </div>`;
+}
+
+function computeStats(nights, group) {
+  const stats = {};
+  Object.keys(group.players || {}).forEach((pid) => { stats[pid] = { pid, nights: 0, net: 0, wins: 0, best: null, worst: null, list: [] }; });
+  nights
+    .filter((n) => n.status === "settled" && n.summary)
+    .sort((a, b) => b.startedAt - a.startedAt)
+    .forEach((n) => {
+      Object.entries(n.summary).forEach(([pid, v]) => {
+        if (!stats[pid]) stats[pid] = { pid, nights: 0, net: 0, wins: 0, best: null, worst: null, list: [] };
+        const net = v.out - v.in;
+        const s = stats[pid];
+        s.nights += 1;
+        s.net += net;
+        if (net > 0) s.wins += 1;
+        s.best = s.best === null ? net : Math.max(s.best, net);
+        s.worst = s.worst === null ? net : Math.min(s.worst, net);
+        s.list.push({ id: n.id, title: nightName(n), date: n.startedAt, net });
+      });
+    });
+  return stats;
+}
+
+function PlayersTab({ group, nights, canWrite, actions, route, setRoute, openNight }) {
+  const stats = useMemo(() => computeStats(nights, group), [nights, group]);
+  const players = Object.entries(group.players || {}).map(([pid, v]) => ({ pid, ...v }));
+
+  if (route.playerId && group.players && group.players[route.playerId]) {
+    const pid = route.playerId;
+    const p = { pid, ...group.players[pid] };
+    const s = stats[pid] || { nights: 0, net: 0, wins: 0, best: null, worst: null, list: [] };
+    return html`<${Profile} p=${p} s=${s} canWrite=${canWrite} actions=${actions} players=${players} onBack=${() => setRoute({ tab: "players" })} openNight=${openNight} />`;
+  }
+
+  const sorted = players.sort((a, b) => (stats[b.pid]?.net || 0) - (stats[a.pid]?.net || 0) || a.name.localeCompare(b.name));
+  return html`<div class="wrap" style="gap:18px">
+    <div>
+      ${canWrite
+        ? html`<${DraftInput} id="group-name" label="Group name" className="group-title" value=${group.name} placeholder="Name your group" onCommit=${(v) => v && actions.renameGroup(v)} />`
+        : html`<h1 class="group-title">${group.name}</h1>`}
+      <p class="meta" style="margin:6px 0 0">All-time totals across closed nights. Tap a player for their profile.</p>
+    </div>
+    ${!sorted.length && html`<div class="empty"><h2>No players yet</h2><p>Players join the group the first time you seat them at a table.</p></div>`}
+    <div class="list">
+      ${sorted.map((p) => {
+        const st = stats[p.pid] || { nights: 0, net: 0, wins: 0 };
+        return html`<button type="button" class="board-row" key=${p.pid} onClick=${() => setRoute({ tab: "players", playerId: p.pid })}>
+          <span class="who"><${Chip} color=${p.color} /><span class="who-name">${p.name}</span></span>
+          <span class="board-meta">${st.nights ? `${st.nights} night${st.nights > 1 ? "s" : ""}, won ${st.wins}` : "No closed nights yet"}</span>
+          <span class=${"r num net " + tone(st.net)}>${st.nights ? signed(st.net) : "₹0"}</span>
+        </button>`;
+      })}
+    </div>
+  </div>`;
+}
+
+function Profile({ p, s, canWrite, actions, players, onBack, openNight }) {
+  const [alias, setAlias] = useState("");
+  const addAlias = () => {
+    const a = alias.trim();
+    if (!a) return;
+    const taken = players.find((o) => o.pid !== p.pid && [o.name, ...(o.aliases || [])].some((n) => norm(n) === norm(a)));
+    if (taken) { actions.toast(`${a} already belongs to ${taken.name}.`); return; }
+    if ([p.name, ...(p.aliases || [])].some((n) => norm(n) === norm(a))) { setAlias(""); return; }
+    actions.updatePlayer(p.pid, { aliases: [...(p.aliases || []), a] });
+    setAlias("");
+  };
+  const avg = s.nights ? s.net / s.nights : 0;
+  return html`<div class="wrap" style="gap:20px">
+    <button type="button" class="btn ghost back" onClick=${onBack}>Back to players</button>
+    <div class="profile-head">
+      <${Chip} color=${p.color} />
+      <div style="min-width:0;flex:1">
+        ${canWrite
+          ? html`<${DraftInput} id=${`pname-${p.pid}`} label="Player name" className="group-title" value=${p.name} onCommit=${(v) => v && actions.updatePlayer(p.pid, { name: v })} />`
+          : html`<h1 class="group-title">${p.name}</h1>`}
+      </div>
+    </div>
+
+    <div class="tiles">
+      <div class="tile"><span class="tile-label">All-time</span><span class=${"tile-val " + tone(s.net)}>${s.nights ? signed(s.net) : "₹0"}</span></div>
+      <div class="tile"><span class="tile-label">Nights played</span><span class="tile-val">${s.nights}</span></div>
+      <div class="tile"><span class="tile-label">Nights won</span><span class="tile-val">${s.wins}</span></div>
+      <div class="tile"><span class="tile-label">Best night</span><span class=${"tile-val " + tone(s.best || 0)}>${s.best === null ? "None" : signed(s.best)}</span></div>
+      <div class="tile"><span class="tile-label">Worst night</span><span class=${"tile-val " + tone(s.worst || 0)}>${s.worst === null ? "None" : signed(s.worst)}</span></div>
+      <div class="tile"><span class="tile-label">Average</span><span class=${"tile-val " + tone(avg)}>${s.nights ? signed(avg) : "None"}</span></div>
+    </div>
+
+    <div>
+      <p class="section-label">Also known as</p>
+      <div class="aliases">
+        ${(p.aliases || []).map((a) => html`<span class="alias">${a}${canWrite && html`<button type="button" aria-label=${`Remove ${a}`} onClick=${() => actions.updatePlayer(p.pid, { aliases: (p.aliases || []).filter((x) => x !== a) })}>×</button>`}</span>`)}
+        ${!(p.aliases || []).length && html`<span class="meta">No other spellings yet.</span>`}
+      </div>
+      ${canWrite && html`<div class="empty-row" style="margin-top:10px">
+        <input id=${`alias-${p.pid}`} class="field" placeholder="Add a spelling or nickname, e.g. Raj" aria-label="Add a spelling or nickname" value=${alias}
+          onInput=${(e) => setAlias(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && addAlias()} />
+        <button type="button" class="btn" onClick=${addAlias}>Add</button>
+      </div>`}
+      <p class="meta" style="margin:8px 0 0">Typing any of these at the table finds ${p.name}, so nobody gets added twice.</p>
+    </div>
+
+    ${canWrite && html`<div>
+      <p class="section-label">Chip colour</p>
+      <div class="palette">
+        ${CHIPS.map((c) => html`<button type="button" class=${c.id === p.color ? "on" : ""} aria-label=${`Use ${c.id}`} onClick=${() => actions.updatePlayer(p.pid, { color: c.id })}><${Chip} color=${c.id} /></button>`)}
+      </div>
+    </div>`}
+
+    <div>
+      <p class="section-label">Nights</p>
+      ${!s.list.length && html`<p class="meta">${p.name} hasn't finished a night yet.</p>`}
+      <div class="list">
+        ${s.list.map((n) => html`<button type="button" class="row-btn" key=${n.id} onClick=${() => openNight(n.id)}>
+          <span class="row-title">${n.title}</span>
+          <span class="row-meta">${fullDate(n.date)}</span>
+          <span class=${"row-side num net " + tone(n.net)}>${signed(n.net)}</span>
+        </button>`)}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ------------------------------------------------------------ */
+/*  App                                                          */
+/* ------------------------------------------------------------ */
+
+function Splash({ leaving, status }) {
+  return html`<div class=${"splash" + (leaving ? " leaving" : "")} role="status" aria-live="polite">
+    <div class="splash-inner">
+      <div class="splash-bars" aria-hidden="true">
+        ${CHIPS.slice(0, 9).map((c, i) => html`<span key=${c.id} style=${`--c:${c.c};--i:${i}`}></span>`)}
+      </div>
+      <h1 class="splash-title">Poker<em>Nights</em></h1>
+      <p class="splash-status"><span>${status}<span class="cursor">_</span></span><span>Buy-ins, chips, who pays whom</span></p>
+    </div>
+  </div>`;
+}
+
+/** All-time table across groups. Same name or nickname in different groups counts as one person. */
+function Leaderboard({ groups, allNights }) {
+  const ids = groups.map((g) => g.id);
+  const [sel, setSel] = useState(() => {
+    try { const v = JSON.parse(store.get("pn:lb") || "null"); return Array.isArray(v) ? v : null; } catch (e) { return null; }
+  });
+  const picked = sel ? sel.filter((id) => ids.includes(id)) : [];
+  const active = picked.length ? picked : ids;
+  const allOn = active.length === ids.length;
+  const save = (v) => { setSel(v); store.set("pn:lb", JSON.stringify(v)); };
+  const toggle = (id) => {
+    if (allOn) { save([id]); return; }
+    const cur = new Set(active);
+    if (cur.has(id)) cur.delete(id); else cur.add(id);
+    save(cur.size === 0 || cur.size === ids.length ? null : ids.filter((x) => cur.has(x)));
+  };
+
+  const rows = useMemo(() => {
+    const people = {}, alias = {}, keyOf = {};
+    groups.filter((g) => active.includes(g.id)).forEach((g) => {
+      Object.entries(g.players || {}).forEach(([pid, p]) => {
+        const names = [p.name, ...(p.aliases || [])].map(norm).filter(Boolean);
+        let key = names.map((n) => alias[n]).find(Boolean);
+        if (!key) {
+          key = names[0] || pid;
+          people[key] = { key, name: p.name, color: p.color, groups: [], nights: 0, wins: 0, net: 0 };
+        }
+        names.forEach((n) => { if (!alias[n]) alias[n] = key; });
+        if (!people[key].groups.includes(g.name)) people[key].groups.push(g.name);
+        keyOf[g.id + ":" + pid] = key;
+      });
+    });
+    (allNights || []).filter((n) => n.summary && active.includes(n.groupId)).forEach((n) => {
+      Object.entries(n.summary).forEach(([pid, v]) => {
+        const e = people[keyOf[n.groupId + ":" + pid]];
+        if (!e) return;
+        const net = v.out - v.in;
+        e.nights += 1;
+        e.net += net;
+        if (net > 0) e.wins += 1;
+      });
+    });
+    return Object.values(people).filter((e) => e.nights > 0).sort((a, b) => b.net - a.net || b.wins - a.wins);
+  }, [groups, allNights, active.join(",")]);
+
+  return html`<div class="wrap" style="gap:18px">
+    <div>
+      <h1 class="group-title" style="border:none">Leaderboard</h1>
+      <p class="meta" style="margin:6px 0 0">All-time totals from closed nights. The same name or nickname in different groups counts as one person.</p>
+    </div>
+    ${groups.length > 1 && html`<div class="filters" role="group" aria-label="Groups to include">
+      <button type="button" class="reg" aria-pressed=${allOn ? "true" : "false"} onClick=${() => save(null)}>All groups</button>
+      ${groups.map((g) => html`<button type="button" class="reg" key=${g.id} aria-pressed=${!allOn && active.includes(g.id) ? "true" : "false"} onClick=${() => toggle(g.id)}>${g.name}</button>`)}
+    </div>`}
+    ${!rows.length && html`<div class="empty"><h2>No results yet</h2><p>Players show up here once a night they played is closed.</p></div>`}
+    <div class="list">
+      ${rows.map((r, i) => html`<div class="board-row static" key=${r.key}>
+        <span class="who"><span class="rank">${i + 1}</span><${Chip} color=${r.color} /><span class="who-name">${r.name}</span></span>
+        <span class="board-meta">${r.nights} night${r.nights > 1 ? "s" : ""}, won ${r.wins}${groups.length > 1 ? `, ${r.groups.join(", ")}` : ""}</span>
+        <span class=${"r num net " + tone(r.net)}>${signed(r.net)}</span>
+      </div>`)}
+    </div>
+  </div>`;
+}
+
+/* ------------------------------------------------------------ */
+/*  Data: Supabase                                               */
+/* ------------------------------------------------------------ */
+
+// The publishable key is meant to be public. Data is protected by each group's edit link.
+const SUPABASE_URL = "https://mqsewazkfdizogxkowln.supabase.co";
+const SUPABASE_KEY = "sb_publishable_gmq0_g5Ry3pXERGvLt912w_C3nFiw6Q";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+});
+
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const LINK_RE = /#\/g\/([a-z0-9]{6,40})(?:\/([a-z0-9]{10,80}))?/i;
+const parseLink = (s) => { const m = (s || "").match(LINK_RE); return m ? { code: m[1].toLowerCase(), secret: m[2] ? m[2].toLowerCase() : null } : null; };
+const readKnown = () => {
+  try { const v = JSON.parse(store.get("pn:known") || "[]"); return Array.isArray(v) ? v.filter((x) => x && x.code) : []; }
+  catch (e) { return []; }
+};
+const baseUrl = () => location.origin + location.pathname;
+
+function ShareLinks({ code, secret, onForget }) {
+  const [confirm, setConfirm] = useState(false);
+  const watch = `${baseUrl()}#/g/${code}`;
+  const edit = secret ? `${baseUrl()}#/g/${code}/${secret}` : null;
+  return html`<section class="share">
+    <p class="section-label">Links</p>
+    <div class="share-row">
+      <div class="share-text">
+        <strong>Watch link</strong>
+        <span class="meta">Anyone with it sees this group live. Read-only.</span>
+        <code>${watch}</code>
+      </div>
+      <${CopyButton} text=${watch} label="Copy" />
+    </div>
+    ${edit && html`<div class="share-row">
+      <div class="share-text">
+        <strong>Edit link</strong>
+        <span class="meta">Anyone with it can add buy-ins and chip counts. Send it only to players.</span>
+        <code>${edit}</code>
+      </div>
+      <${CopyButton} text=${edit} label="Copy" />
+    </div>`}
+    <div class="actions">
+      ${confirm
+        ? html`<span class="meta">Remove from this phone? You'll need the link to get it back.</span>
+            <button type="button" class="btn danger" onClick=${onForget}>Remove</button>
+            <button type="button" class="btn ghost" onClick=${() => setConfirm(false)}>Keep</button>`
+        : html`<button type="button" class="linkbtn" onClick=${() => setConfirm(true)}>Remove this group from this device</button>`}
+    </div>
+  </section>`;
+}
+
+function App() {
+  const [known, setKnownState] = useState(readKnown);
+  const [active, setActiveState] = useState(() => store.get("pn:active"));
+  const [bundles, setBundles] = useState({});
+  const [booted, setBooted] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [route, setRouteState] = useState(() => ({ tab: store.get("pn:tab") || "table" }));
+  const [toastMsg, setToastMsg] = useState("");
+  const [newGroup, setNewGroup] = useState("");
+  const [pasted, setPasted] = useState("");
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const toastTimer = useRef(null);
+  const seq = useRef({});
+  const channel = useRef(null);
+  const knownRef = useRef(known);
+  knownRef.current = known;
+
+  const setRoute = (r) => { setRouteState(r); store.set("pn:tab", r.tab); window.scrollTo(0, 0); };
+  const toast = useCallback((msg) => {
+    setToastMsg(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToastMsg(""), 3400);
+  }, []);
+  const setKnown = (list) => { setKnownState(list); store.set("pn:known", JSON.stringify(list)); };
+  const setActive = (code) => { setActiveState(code); if (code) store.set("pn:active", code); };
+  const secretOf = (code) => { const k = knownRef.current.find((x) => x.code === code); return k ? k.secret : null; };
+
+  const load = useCallback(async (code) => {
+    const n = (seq.current[code] = (seq.current[code] || 0) + 1);
+    const { data, error } = await sb.rpc("pn_get", { p_code: code });
+    if (seq.current[code] !== n) return;
+    if (error) { setOffline(true); return; }
+    setOffline(false);
+    setBundles((b) => ({ ...b, [code]: data || null }));
+  }, []);
+
+  // Add a group from a link (with or without its edit secret).
+  const addFromLink = useCallback(async (link) => {
+    let list = readKnown();
+    const i = list.findIndex((x) => x.code === link.code);
+    let secret = link.secret;
+    if (secret) {
+      const { data } = await sb.rpc("pn_can_edit", { p_code: link.code, p_secret: secret });
+      if (!data) secret = null;
+    }
+    if (i === -1) list = [...list, { code: link.code, secret }];
+    else if (secret && list[i].secret !== secret) list = list.map((x, j) => (j === i ? { ...x, secret } : x));
+    setKnown(list);
+    knownRef.current = list;
+    setActive(link.code);
+    await load(link.code);
+    if (link.secret && !secret) toast("That edit link isn't valid any more. You can still watch.");
+  }, [load, toast]);
+
+  // First load: anything in the address bar, then every group this device knows.
+  useEffect(() => {
+    (async () => {
+      const link = parseLink(location.hash);
+      if (link) {
+        await addFromLink(link);
+        try { history.replaceState(null, "", `${baseUrl()}#/g/${link.code}`); } catch (e) {}
+      }
+      await Promise.all(readKnown().map((k) => load(k.code)));
+      setBooted(true);
+    })();
+    const onHash = () => { const l = parseLink(location.hash); if (l) addFromLink(l); };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const groups = known.map((k) => (bundles[k.code] ? { id: k.code, ...bundles[k.code].group } : null)).filter(Boolean);
+  const activeCode = groups.find((g) => g.id === active) ? active : groups[0] ? groups[0].id : null;
+  const bundle = activeCode ? bundles[activeCode] : null;
+  const group = bundle ? { id: activeCode, ...bundle.group } : null;
+  const nights = bundle ? bundle.nights.map((n) => ({ ...n, groupId: activeCode })) : null;
+  const allNights = known.flatMap((k) => (bundles[k.code] ? bundles[k.code].nights.map((n) => ({ ...n, groupId: k.code })) : []));
+  const canWrite = !!(activeCode && secretOf(activeCode));
+  const missing = known.filter((k) => bundles[k.code] === null);
+
+  // Live: hear other phones' changes, plus a slow refresh as a backstop.
+  useEffect(() => {
+    if (!activeCode) return;
+    const ch = sb.channel("pn-" + activeCode, { config: { broadcast: { self: false } } });
+    ch.on("broadcast", { event: "changed" }, () => load(activeCode)).subscribe();
+    channel.current = ch;
+    const tick = () => { if (document.visibilityState === "visible") load(activeCode); };
+    const iv = setInterval(tick, 15000);
+    document.addEventListener("visibilitychange", tick);
+    return () => { sb.removeChannel(ch); channel.current = null; clearInterval(iv); document.removeEventListener("visibilitychange", tick); };
+  }, [activeCode]);
+  const ping = () => { try { channel.current && channel.current.send({ type: "broadcast", event: "changed", payload: {} }); } catch (e) {} };
+
+  const openNight = nights ? [...nights].filter((n) => n.status === "open").sort((a, b) => b.startedAt - a.startedAt)[0] || null : null;
+  const viewedId = route.tab === "table" ? (openNight ? openNight.id : null) : route.tab === "history" ? route.nightId || null : null;
+  const viewed = nights && viewedId ? nights.find((n) => n.id === viewedId) || null : null;
+  const events = bundle && viewedId ? bundle.events.filter((e) => e.nightId === viewedId) : null;
+  const roster = group ? Object.entries(group.players || {}).map(([pid, v]) => ({ pid, ...v })).sort((a, b) => a.name.localeCompare(b.name)) : [];
+
+  // Loading screen
+  const [minDone, setMinDone] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMinDone(true), 1100); return () => clearTimeout(t); }, []);
+  const showSplash = !(minDone && booted);
+  const [splashMounted, setSplashMounted] = useState(true);
+  useEffect(() => {
+    if (showSplash) return;
+    const t = setTimeout(() => setSplashMounted(false), 320);
+    return () => clearTimeout(t);
+  }, [showSplash]);
+  const splashStatus = !booted ? "Connecting" : "Dealing you in";
+
+  /* ---- writes: update this phone first, then save, then re-read ---- */
+  const mutate = async (local, fn, args) => {
+    const code = activeCode;
+    const secret = secretOf(code);
+    if (!secret) { toast("This link can only watch. Ask the host for the edit link."); return false; }
+    if (local) setBundles((b) => (b[code] ? { ...b, [code]: local(b[code]) } : b));
+    const { error } = await sb.rpc(fn, { p_code: code, p_secret: secret, ...args });
+    if (error) {
+      if (error.code === "42501" || /not_allowed/.test(error.message || "")) {
+        setKnown(knownRef.current.map((k) => (k.code === code ? { ...k, secret: null } : k)));
+        toast("This edit link no longer works. You can still watch.");
+      } else {
+        toast("That change didn't save. Check your connection and try again.");
+      }
+      load(code);
+      return false;
+    }
+    load(code);
+    ping();
+    return true;
+  };
+  const patchNight = (id, fn) => (b) => ({ ...b, nights: b.nights.map((n) => (n.id === id ? fn(n) : n)) });
+
+  const target = viewed;
+  const actions = {
+    toast,
+    addEvent: (pid, amount, note) => {
+      const id = uid();
+      return mutate(
+        (b) => ({ ...b, events: [...b.events, { id, nightId: target.id, pid, amount, note, at: Date.now() }] }),
+        "pn_event_add", { p_night: target.id, p_id: id, p_pid: pid, p_amount: amount, p_note: note || "" });
+    },
+    deleteEvent: (eid) => mutate((b) => ({ ...b, events: b.events.filter((e) => e.id !== eid) }), "pn_event_delete", { p_id: eid }),
+    setCashOut: (pid, v) => mutate(
+      patchNight(target.id, (n) => ({ ...n, seats: n.seats.map((s) => (s.pid === pid ? { ...s, cashOut: v } : s)) })),
+      "pn_seat_cash", { p_night: target.id, p_pid: pid, p_cash: v }),
+    renameNight: (name) => mutate(patchNight(target.id, (n) => ({ ...n, name })), "pn_night_patch", { p_night: target.id, p_patch: { name } }),
+    setUnit: (unit) => mutate(patchNight(target.id, (n) => ({ ...n, unit })), "pn_night_patch", { p_night: target.id, p_patch: { unit } }),
+    seatPlayer: async (pid) => {
+      if (target.seats.some((s) => s.pid === pid)) return;
+      const eid = uid();
+      const nid = target.id, unit = target.unit;
+      await mutate((b) => ({
+        ...patchNight(nid, (n) => ({ ...n, seats: [...n.seats, { pid, cashOut: null }] }))(b),
+        events: [...b.events, { id: eid, nightId: nid, pid, amount: unit, note: "Buy-in", at: Date.now() }],
+      }), "pn_seat_add", { p_night: nid, p_pid: pid, p_event: eid });
+    },
+    seatNewPlayer: async (name) => {
+      const pid = "p" + uid();
+      const used = new Set(roster.map((p) => p.color));
+      const color = (CHIPS.find((c) => !used.has(c.id)) || CHIPS[roster.length % CHIPS.length]).id;
+      const player = { name, aliases: [], color, createdAt: Date.now() };
+      const ok = await mutate((b) => ({ ...b, group: { ...b.group, players: { ...b.group.players, [pid]: player } } }),
+        "pn_group_update", { p_name: null, p_players: { [pid]: player } });
+      if (ok) await actions.seatPlayer(pid);
+    },
+    removeSeat: (pid) => {
+      const nid = target.id;
+      return mutate((b) => ({
+        ...patchNight(nid, (n) => ({ ...n, seats: n.seats.filter((s) => s.pid !== pid) }))(b),
+        events: b.events.filter((e) => !(e.nightId === nid && e.pid === pid)),
+      }), "pn_seat_remove", { p_night: nid, p_pid: pid });
+    },
+    cycleColor: (pid) => {
+      const cur = group.players[pid] ? group.players[pid].color : CHIPS[0].id;
+      const i = CHIPS.findIndex((c) => c.id === cur);
+      return actions.updatePlayer(pid, { color: CHIPS[(i + 1) % CHIPS.length].id });
+    },
+    updatePlayer: (pid, patch) => mutate(
+      (b) => ({ ...b, group: { ...b.group, players: { ...b.group.players, [pid]: { ...(b.group.players[pid] || {}), ...patch } } } }),
+      "pn_group_update", { p_name: null, p_players: { [pid]: patch } }),
+    renameGroup: (name) => mutate((b) => ({ ...b, group: { ...b.group, name } }), "pn_group_update", { p_name: name, p_players: null }),
+    closeNight: async (t) => {
+      const summary = {};
+      t.seats.forEach((s) => { summary[s.pid] = { in: s.paid, out: s.cashOut || 0 }; });
+      const patch = { status: "settled", settledAt: Date.now(), summary };
+      const ok = await mutate(patchNight(target.id, (n) => ({ ...n, ...patch })), "pn_night_patch", { p_night: target.id, p_patch: patch });
+      if (ok) toast("Night closed. It's in History now.");
+    },
+    reopenNight: async () => {
+      const ok = await mutate(patchNight(target.id, (n) => ({ ...n, status: "open", settledAt: null })), "pn_night_patch",
+        { p_night: target.id, p_patch: { status: "open", settledAt: null } });
+      if (ok) { toast("Night reopened on the table."); setRoute({ tab: "table" }); }
+    },
+    deleteNight: async () => {
+      const id = target.id;
+      const ok = await mutate((b) => ({ ...b, nights: b.nights.filter((n) => n.id !== id), events: b.events.filter((e) => e.nightId !== id) }),
+        "pn_night_delete", { p_night: id });
+      if (ok) { toast("Night deleted."); setRoute({ tab: "history" }); }
+    },
+  };
+
+  const startNight = async () => {
+    const last = (nights || []).slice().sort((a, b) => b.startedAt - a.startedAt)[0];
+    const unit = last ? last.unit : 500;
+    const pids = last ? (last.seats || []).map((s) => s.pid).filter((pid) => group.players && group.players[pid]) : [];
+    const id = uid();
+    const now = Date.now();
+    const ok = await mutate((b) => ({
+      ...b,
+      nights: [...b.nights, { id, name: "", unit, status: "open", startedAt: now, settledAt: null, seats: pids.map((pid) => ({ pid, cashOut: null })), summary: null }],
+      events: [...b.events, ...pids.map((pid) => ({ id: `${id}-${pid}`, nightId: id, pid, amount: unit, note: "Buy-in", at: now }))],
+    }), "pn_night_create", { p_id: id, p_unit: unit, p_pids: pids });
+    if (ok) setRoute({ tab: "table" });
+  };
+
+  const createGroup = async () => {
+    const name = newGroup.trim();
+    if (!name || busy) return;
+    setBusy(true);
+    const { data, error } = await sb.rpc("pn_create_group", { p_name: name });
+    setBusy(false);
+    if (error || !data) { toast("Couldn't create the group. Check your connection and try again."); return; }
+    const list = [...readKnown(), { code: data.code, secret: data.secret }];
+    setKnown(list);
+    knownRef.current = list;
+    setActive(data.code);
+    await load(data.code);
+    setNewGroup(""); setCreatingGroup(false);
+    setRoute({ tab: "players" });
+    toast("Group created. Send the edit link to your players.");
+  };
+
+  const joinPasted = async () => {
+    const link = parseLink(pasted);
+    if (!link) { toast("That doesn't look like a Poker Nights link."); return; }
+    setBusy(true);
+    await addFromLink(link);
+    setBusy(false);
+    setPasted(""); setCreatingGroup(false);
+    setRoute({ tab: "table" });
+  };
+
+  const forget = () => {
+    const list = known.filter((k) => k.code !== activeCode);
+    setKnown(list);
+    knownRef.current = list;
+    setActive(list[0] ? list[0].code : null);
+    setRoute({ tab: "table" });
+    toast("Removed from this device.");
+  };
+
+  /* ---- render ---- */
+  const shell = (content) => html`<div class="wrap">
+    <header class="top">
+      <div class="brand"><${Chip} color="red" size=${22} /> Poker Nights</div>
+      <div class="top-right">
+        ${group && !canWrite && html`<span class="pill"><span class="live-dot"></span>Watching live</span>`}
+        ${offline && html`<span class="pill" style="color:var(--warn-fg)">Offline, retrying</span>`}
+        ${groups.length > 0 && html`<select class="select" id="group-select" aria-label="Group"
+          onChange=${(e) => {
+            if (e.target.value === "__new") { setCreatingGroup(true); return; }
+            setCreatingGroup(false); setActive(e.target.value); setRoute({ tab: route.tab });
+          }}>
+          ${groups.map((g) => html`<option value=${g.id} selected=${!creatingGroup && g.id === activeCode}>${g.name}</option>`)}
+          <option value="__new" selected=${creatingGroup}>New or join a group</option>
+        </select>`}
+      </div>
+    </header>
+    ${group && !creatingGroup && html`<nav class="tabs" aria-label="Sections">
+      <button type="button" class=${"tab" + (route.tab === "table" ? " on" : "")} onClick=${() => setRoute({ tab: "table" })}>Table</button>
+      <button type="button" class=${"tab" + (route.tab === "history" ? " on" : "")} onClick=${() => setRoute({ tab: "history" })}>History${nights && nights.length ? html`<span class="count">${nights.length}</span>` : ""}</button>
+      <button type="button" class=${"tab" + (route.tab === "players" ? " on" : "")} onClick=${() => setRoute({ tab: "players" })}>Players${roster.length ? html`<span class="count">${roster.length}</span>` : ""}</button>
+      <button type="button" class=${"tab" + (route.tab === "leaderboard" ? " on" : "")} onClick=${() => setRoute({ tab: "leaderboard" })}>Leaderboard</button>
+    </nav>`}
+    ${content}
+    ${toastMsg && html`<div class="toast" role="status">${toastMsg}</div>`}
+    ${splashMounted && html`<${Splash} leaving=${!showSplash} status=${splashStatus} />`}
+  </div>`;
+
+  const skeleton = html`<div class="list"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>`;
+  if (!booted) return shell(skeleton);
+
+  if (!groups.length || creatingGroup) {
+    return shell(html`<div class="empty">
+      <h2>${groups.length ? "Another group" : "Start a group"}</h2>
+      <p>A group is the crew you play with. Its players, nights and all-time totals stay together, and you get a link to share with them.</p>
+      <div class="empty-row">
+        <input id="new-group" class="field" placeholder="e.g. Friday crew" aria-label="Group name" value=${newGroup}
+          onInput=${(e) => setNewGroup(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && createGroup()} />
+        <button type="button" class="btn primary" disabled=${!newGroup.trim() || busy} onClick=${createGroup}>Create group</button>
+      </div>
+      <p>Got a link from a friend? Paste it here, or just open it.</p>
+      <div class="empty-row">
+        <input id="paste-link" class="field" placeholder="Paste a group link" aria-label="Group link" value=${pasted}
+          onInput=${(e) => setPasted(e.target.value)} onKeyDown=${(e) => e.key === "Enter" && joinPasted()} />
+        <button type="button" class="btn" disabled=${!pasted.trim() || busy} onClick=${joinPasted}>Open</button>
+      </div>
+      ${missing.length > 0 && html`<p class="meta">${missing.length} saved group${missing.length > 1 ? "s" : ""} could not be found. They may have been deleted.</p>`}
+      ${groups.length > 0 && html`<button type="button" class="btn ghost" onClick=${() => setCreatingGroup(false)}>Cancel</button>`}
+      ${offline && html`<button type="button" class="btn" onClick=${() => location.reload()}>Retry connection</button>`}
+    </div>`);
+  }
+
+  if (route.tab === "table") {
+    if (!openNight) {
+      const last = [...nights].sort((a, b) => b.startedAt - a.startedAt)[0];
+      const lineup = last ? (last.seats || []).map((s) => (group.players && group.players[s.pid] ? group.players[s.pid].name : null)).filter(Boolean) : [];
+      return shell(html`<div class="empty">
+        <h2>${nights.length ? "No game running" : "Deal the first night"}</h2>
+        <p>${canWrite
+          ? lineup.length
+            ? `Starting seats ${lineup.length <= 3 ? lineup.join(", ") : `${lineup.slice(0, 2).join(", ")} and ${lineup.length - 2} others`} with one ${money(last.unit)} buy-in each. Add or remove anyone once it's open.`
+            : "Start a night, then add players by name. Everyone you add joins the group, so next time they're one tap away."
+          : "When someone with the edit link starts a night, the table appears here and updates live."}</p>
+        ${canWrite && html`<button type="button" class="btn primary" onClick=${startNight}>Start a new night</button>`}
+      </div>`);
+    }
+    return shell(html`<${NightView} night=${openNight} events=${events} group=${group} roster=${roster} canWrite=${canWrite} archive=${false} actions=${actions} />`);
+  }
+
+  if (route.tab === "history") {
+    if (route.nightId) {
+      if (!viewed) return shell(html`<div class="empty"><h2>That night is gone</h2><p>It may have been deleted.</p><button type="button" class="btn" onClick=${() => setRoute({ tab: "history" })}>Back to all nights</button></div>`);
+      const isLive = viewed.status === "open";
+      return shell(html`<${NightView} night=${viewed} events=${events} group=${group} roster=${roster} canWrite=${canWrite} archive=${!isLive} actions=${actions} onBack=${() => setRoute({ tab: "history" })} />`);
+    }
+    return shell(html`<${HistoryList} nights=${nights} group=${group} onOpen=${(id) => {
+      const n = nights.find((x) => x.id === id);
+      if (n && openNight && n.id === openNight.id) setRoute({ tab: "table" });
+      else setRoute({ tab: "history", nightId: id });
+    }} />`);
+  }
+
+  if (route.tab === "leaderboard") {
+    return shell(html`<${Leaderboard} groups=${groups} allNights=${allNights} />`);
+  }
+
+  return shell(html`
+    ${!route.playerId && html`<${ShareLinks} code=${activeCode} secret=${secretOf(activeCode)} onForget=${forget} />`}
+    <${PlayersTab} group=${group} nights=${nights} canWrite=${canWrite} actions=${actions} route=${route} setRoute=${setRoute}
+      openNight=${(id) => setRoute({ tab: "history", nightId: id })} />`);
+}
+
+render(html`<${App} />`, document.getElementById("app"));
+</script>
+</body>
+</html>
