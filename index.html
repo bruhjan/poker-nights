@@ -324,6 +324,15 @@ h1, h2, h3 { margin: 0; text-wrap: balance; }
 .splash-status .cursor { color: var(--accent); }
 @media (prefers-reduced-motion: no-preference) { .splash-status .cursor { animation: blink 1s steps(1) infinite; } }
 
+/* ---- top-bar panels (share, account) ---- */
+.top { position: relative; }
+.pop-scrim { position: fixed; inset: 0; z-index: 21; }
+.pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 22; width: min(560px, 100%); box-shadow: 6px 6px 0 var(--accent); }
+.pop .share { background: var(--bg); border-color: var(--fg); }
+.btn.ghost.on { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+/* a page section nested in the shell fills the column instead of shrinking to its content */
+.wrap .wrap { width: 100%; max-width: none; margin-inline: 0; }
+
 /* ---- phone ---- */
 @media (max-width: 760px) {
   .ledger-head { display: none; }
@@ -1127,8 +1136,15 @@ function AccountBox({ user, onSignIn, onSignOut }) {
 function App() {
   const [known, setKnownState] = useState(readKnown);
   const [user, setUser] = useState(null);
+  const [panel, setPanel] = useState(null); // "share" | "account" | null
   const userRef = useRef(null);
   userRef.current = user;
+  useEffect(() => {
+    if (!panel) return;
+    const onKey = (e) => { if (e.key === "Escape") setPanel(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panel]);
   const [active, setActiveState] = useState(() => store.get("pn:active"));
   const [bundles, setBundles] = useState({});
   const [booted, setBooted] = useState(false);
@@ -1145,7 +1161,7 @@ function App() {
   const knownRef = useRef(known);
   knownRef.current = known;
 
-  const setRoute = (r) => { setRouteState(r); store.set("pn:tab", r.tab); window.scrollTo(0, 0); };
+  const setRoute = (r) => { setPanel(null); setRouteState(r); store.set("pn:tab", r.tab); window.scrollTo(0, 0); };
   const toast = useCallback((msg) => {
     setToastMsg(msg);
     clearTimeout(toastTimer.current);
@@ -1204,6 +1220,7 @@ function App() {
     if (error) toast("Couldn't start Google sign-in. Try again in a moment.");
   };
   const signOut = async () => {
+    setPanel(null);
     await sb.auth.signOut();
     setUser(null);
     setKnown([]);
@@ -1430,7 +1447,12 @@ function App() {
       <div class="brand"><${Chip} color="red" size=${22} /> Poker Nights</div>
       <div class="top-right">
         ${group && !canWrite && html`<span class="pill"><span class="live-dot"></span>Watching live</span>`}
-        ${booted && !user && html`<button type="button" class="btn ghost" onClick=${signIn}>Sign in</button>`}
+        ${group && !creatingGroup && html`<button type="button" class=${"btn ghost" + (panel === "share" ? " on" : "")} aria-expanded=${panel === "share" ? "true" : "false"}
+          onClick=${() => setPanel(panel === "share" ? null : "share")}>Share</button>`}
+        ${booted && (user
+          ? html`<button type="button" class=${"btn ghost" + (panel === "account" ? " on" : "")} aria-expanded=${panel === "account" ? "true" : "false"}
+              title="Your account" onClick=${() => setPanel(panel === "account" ? null : "account")}>${(user.name || "Account").split(" ")[0]}</button>`
+          : html`<button type="button" class="btn ghost" onClick=${signIn}>Sign in</button>`)}
         ${offline && html`<span class="pill" style="color:var(--warn-fg)">Offline, retrying</span>`}
         ${groups.length > 0 && html`<select class="select" id="group-select" aria-label="Group"
           onChange=${(e) => {
@@ -1441,6 +1463,12 @@ function App() {
           <option value="__new" selected=${creatingGroup}>New or join a group</option>
         </select>`}
       </div>
+      ${panel && html`<div class="pop-scrim" onClick=${() => setPanel(null)}></div>
+        <div class="pop">
+          ${panel === "share" && activeCode
+            ? html`<${ShareLinks} code=${activeCode} secret=${secretOf(activeCode)} onForget=${forget} />`
+            : html`<${AccountBox} user=${user} onSignIn=${signIn} onSignOut=${signOut} />`}
+        </div>`}
     </header>
     ${group && !creatingGroup && html`<nav class="tabs" aria-label="Sections">
       <button type="button" class=${"tab" + (route.tab === "table" ? " on" : "")} onClick=${() => setRoute({ tab: "table" })}>Table</button>
@@ -1514,8 +1542,6 @@ function App() {
   }
 
   return shell(html`
-    ${!route.playerId && html`<${AccountBox} user=${user} onSignIn=${signIn} onSignOut=${signOut} />`}
-    ${!route.playerId && html`<${ShareLinks} code=${activeCode} secret=${secretOf(activeCode)} onForget=${forget} />`}
     <${PlayersTab} group=${group} nights=${nights} canWrite=${canWrite} actions=${actions} route=${route} setRoute=${setRoute}
       openNight=${(id) => setRoute({ tab: "history", nightId: id })} />`);
 }
